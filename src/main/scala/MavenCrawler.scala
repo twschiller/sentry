@@ -59,11 +59,14 @@ object MavenCrawler {
     })
   }
 
-  /* Fetch the POM for the specified artifact */
+  /* Fetch the POM for the specified version of an artifact */
   def fetchPom(id: Header) : Elem = {
     if (id.groupId == null || id.groupId.isEmpty){
-      throw new IllegalArgumentException("group id cannot be null or empty")
+      throw new IllegalArgumentException("group id is required")
+    }else if (id.version.isEmpty){
+      throw new IllegalArgumentException("version id is required")
     }
+
     val pomUrl = new URL(s"https://search.maven.org/remotecontent?filepath=${id.groupId.replaceAll("\\.", "/")}/${id.artifactId}/${id.version.get.version}/${id.artifactId}-${id.version.get.version}.pom")
     XML.load(pomUrl)
   }

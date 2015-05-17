@@ -15,41 +15,30 @@
 
 package com.toddschiller.sentry.test
 
-import com.toddschiller.sentry.Header
+import com.toddschiller.sentry.{License, SoftGraph, Header}
 import eu.fakod.neo4jscala.{DatabaseService, DatabaseServiceImpl, Neo4jWrapper}
 import org.neo4j.graphdb.{Direction, DynamicRelationshipType}
 import org.neo4j.test.TestGraphDatabaseFactory
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfter, FunSuite}
 
-class SoftGraphSpec extends FunSuite with Neo4jWrapper with BeforeAndAfter {
+class SoftGraphSpec extends FunSuite with BeforeAndAfter with BeforeAndAfterAll {
 
   val ds : DatabaseService = DatabaseServiceImpl(new TestGraphDatabaseFactory().newImpermanentDatabase())
+  val graph : SoftGraph = new SoftGraph(ds)
 
-  before {
-    // Delete everything in the DB
-    withTx {
-      implicit neo =>
-        getAllNodes(ds).foreach(_.delete())
-    }
+  val project1 = Header("com.toddschiller.sentry", "sentry")
+  val project2 = Header("eu.fakod", "neo4j-scala")
+  val license1 = License("Apache License Version 2.0", "https://www.apache.org/licenses/LICENSE-2.0.html")
+
+  test("don't duplicate project nodes") {
+    val node1 = graph.addProject(project1)
+    val node2 = graph.addProject(project1)
+    assert(node2 === node1)
   }
 
-  after {
-    ds.gds.shutdown()
-  }
-
-
-  // Copied from neo4j-scala's Neo4jWrapperTest.scala
-  test("create a new relationship in --> relType --> notation") {
-    withTx {
-      implicit neo =>
-        val start = createNode(Header("com.toddschiller.sentry", "sentry"))
-        val end = createNode(Header("eu.fakod", "neo4j-scala"))
-        val relType = DynamicRelationshipType.withName("depends_on")
-        val rel1 = start --> relType --> end <
-        val rel2 = start.getSingleRelationship(relType, Direction.OUTGOING)
-
-        assert(rel2.getOtherNode(start) === end)
-        assert(rel1 === rel2)
-    }
+  test("don't duplicate license nodes") {
+    val node1 = graph.addLicense(license1)
+    val node2 = graph.addLicense(license1)
+    assert(node2 === node1)
   }
 }

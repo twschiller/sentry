@@ -19,9 +19,12 @@ import eu.fakod.neo4jscala._
 import org.neo4j.graphdb.Node
 
 case class Header(groupId : String, artifactId: String)
+case class License(name: String, url: String)
 
 class SoftGraph(override val ds: DatabaseService) extends Neo4jWrapper with Neo4jIndexProvider {
-  override def NodeIndexConfig = ("groupIndex", Some(Map("provider" -> "lucene", "type" -> "fulltext"))) :: Nil
+  override def NodeIndexConfig =
+    ("groupIndex", Some(Map("provider" -> "lucene", "type" -> "fulltext"))) ::
+    ("licenseIndex", Some(Map("provider" -> "lucene", "type" -> "fulltext"))) :: Nil
 
   /** Add a project to the graph; if the project already exists, returns the existing project (without
     * updating any properties of the project).
@@ -30,13 +33,12 @@ class SoftGraph(override val ds: DatabaseService) extends Neo4jWrapper with Neo4
     withTx {
       implicit neo =>
         val nodeIndex = getNodeIndex("groupIndex").get
-        val result =  nodeIndex.get("group", header.groupId)
+        val result = nodeIndex.get("group", header.groupId)
 
         while (result.hasNext){
           val n = result.next()
 
           if (n.toCC[Header].get == header){
-            println(s"Found existing node in index: ${n.toCC[Header]}")
             result.close()
             return n
           }
@@ -48,20 +50,42 @@ class SoftGraph(override val ds: DatabaseService) extends Neo4jWrapper with Neo4
     }
   }
 
+  def addLicense(license : License) : Node = {
+    withTx {
+      implicit neo =>
+        val nodeIndex = getNodeIndex("licenseIndex").get
+        val result =  nodeIndex.get("name", license.name)
+
+        while (result.hasNext){
+          val n = result.next()
+
+          if (n.toCC[License].get == license){
+            result.close()
+            return n
+          }
+        }
+
+        val node = createNode(license)
+        nodeIndex += (node, "name", license.name)
+        node
+    }
+  }
+
   def addProject(header : maven.Header) : Node = {
     addProject(Header(header.groupId, header.artifactId))
   }
 
-  /** Set license for project. Overwrites any existing information for that project. Creates a project node if the
-    * project does not already exist.
-    */
-  def addLicense(header : maven.Header, license : maven.License) = {
+  def addLicense(header : Header, license : License) : Node = {
     withTx {
       implicit neo =>
-        val node = addProject(header)
-        node.setProperty("license", license.name)
-        node.setProperty("licenseUrl", license.url)
+        val node = addLicense(license)
+        addProject(header) --> "has_license" --> node
+        node
     }
+  }
+
+  def addLicense(header : maven.Header, license : maven.License) : Node = {
+    addLicense(Header(header.groupId, header.artifactId), License(license.name, license.url.getOrElse(null)))
   }
 
   /** Add dependencies for project, creating new project nodes as necessary */
